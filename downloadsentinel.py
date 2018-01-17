@@ -3,24 +3,37 @@ import os
 from datetime import date
 from sentinelsat import SentinelAPI, read_geojson, geojson_to_wkt
 
-# connect to the API
-api = SentinelAPI('noel.datos', 'datos2018', 'https://cophub.copernicus.eu/dhus')
+# login credentials
+username = ''
+password = ''
 
-# read geojson
-geojson_dir = r'C:\Users\jeromepogi\Desktop\Sentinel1 PH\Sentinel 1A\s1a geojson'
-geojson = os.path.join(geojson_dir, 'C1.geojson')
-footprint = geojson_to_wkt(read_geojson(geojson))
+# directories
+areacode = ''
+geojson_dir = r''
+output_dir = r''
 
 # query keywords
-start_date = 'NOW-26DAYS'
-end_date = 'NOW'
-file_name = 'S1A*'
-product_type = 'SLC'
-platform_name = 'Sentinel-1'
-orbit_direction = 'Descending'
+start_date = None
+end_date = None
+file_name = None
+product_type = None
+platform_name = None
+orbit_direction = None
 polarisation_mode = None
 cloud_cover_percentage = None
 sensor_operational_mode = None
+
+# output modes
+downloadProducts = False
+printProducts = True
+getGeoJSON = False
+
+# connect to the API
+api = SentinelAPI(username, password, 'https://scihub.copernicus.eu/dhus')
+
+# read geojson
+geojson = os.path.join(geojson_dir, '%s.geojson' % areacode)
+footprint = geojson_to_wkt(read_geojson(geojson))
 
 raw_query = ''
 if file_name is not None:
@@ -40,15 +53,18 @@ if sensor_operational_mode is not None:
 raw_query = raw_query[:-5]
 
 # search by polygon, time, and SciHub query keywords
-products = api.query(footprint,
-                     date = (start_date, end_date),
-                     raw = raw_query)
+products = api.query(footprint, date = (start_date, end_date), raw = raw_query)
 
-### download all results from the search
-##api.download_all(products)
+# download all results from the search
+if downloadProducts:
+    api.download_all(products, output_dir)
 
-for product in products:
-    print product
+# print results from the search
+if printProducts:
+    print "%d products found." % len(products)
+    for product in products:
+        print product
 
-### GeoJSON FeatureCollection containing footprints and metadata of the scenes
-##api.to_geojson(products)
+# GeoJSON FeatureCollection containing footprints and metadata of the scenes
+if getGeoJSON:
+    api.to_geojson(products)
