@@ -1,11 +1,13 @@
 # import modules
 import os
-from datetime import date
+import sqlite3
+from datetime import date, datetime
 from sentinelsat import SentinelAPI, read_geojson, geojson_to_wkt
 
 # login credentials
 username = ''
 password = ''
+url = ''
 
 # directories
 areacode = ''
@@ -23,13 +25,14 @@ polarisation_mode = None
 cloud_cover_percentage = None
 sensor_operational_mode = None
 
-# output modes
-downloadProducts = False
+# post-search modes
 printProducts = True
+writeToDB = False
+downloadProducts = False
 getGeoJSON = False
 
 # connect to the API
-api = SentinelAPI(username, password, 'https://scihub.copernicus.eu/dhus')
+api = SentinelAPI(username, password, url)
 
 # read geojson
 geojson = os.path.join(geojson_dir, '%s.geojson' % areacode)
@@ -55,15 +58,46 @@ raw_query = raw_query[:-5]
 # search by polygon, time, and SciHub query keywords
 products = api.query(footprint, date = (start_date, end_date), raw = raw_query)
 
-# download all results from the search
-if downloadProducts:
-    api.download_all(products, output_dir)
-
 # print results from the search
 if printProducts:
     print "%d products found." % len(products)
     for product in products:
         print product
+
+# write to database
+if writeToDB:
+    conn = sqlite3.connect('sentinel')
+    c = conn.cursor()
+    products_new = dict(products)
+    for product in products:
+        c.execute('SELECT * FROM downloads where productid = ?', (product,)) 
+        temp = c.fetchone()
+        if temp is None:
+            if products[product]['filename'].startswith('S1A'):
+                attr_platformname = 'Sentinel-1A'
+            elif products[product]['filename'].startswith('S1B'):
+                attr_platformname = 'Sentinel-1B'
+            attr_dateacquired = str(products[product]['beginposition']).split()[0]
+            attr_producttype = products[product]['producttype']
+            attr_orbitdirection = products[product]['orbitdirection']
+            attr_polarisationmode = products[product]['polarisationmode']
+            attr_sensoropmode = products[product]['sensoroperationalmode']
+            attr_productid = product
+            attr_datedownloaded = str(datetime.today()).split()[0]
+            parameters = (attr_platformname, areacode, attr_dateacquired,
+                          attr_producttype, attr_orbitdirection,
+                          attr_polarisationmode, attr_sensoropmode,
+                          attr_productid, attr_datedownloaded)
+            c.execute("INSERT INTO downloads VALUES (NULL,?,?,?,?,?,?,?,?,?)", parameters)
+    else:
+        products_new.pop(product)
+        
+    conn.commit()
+    conn.close()
+
+# download all results from the search
+if downloadProducts:
+    api.download_all(products, output_dir)
 
 # GeoJSON FeatureCollection containing footprints and metadata of the scenes
 if getGeoJSON:
